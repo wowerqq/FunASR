@@ -21,6 +21,7 @@ class ModelExport:
         audio_in: str = None,
         calib_num: int = 200,
         model_revision: str = None,
+        model_type: str = None
     ):
         self.set_all_random_seed(0)
 
@@ -38,6 +39,7 @@ class ModelExport:
         self.audio_in = audio_in
         self.calib_num = calib_num
         self.model_revision = model_revision
+        self.model_type = model_type
         
 
     def _export(
@@ -54,6 +56,7 @@ class ModelExport:
         self.export_config["model_name"] = "model"
         model = get_model(
             model,
+            self.model_type,
             self.export_config,
         )
         if isinstance(model, List):
@@ -236,15 +239,41 @@ class ModelExport:
         model_script = model #torch.jit.trace(model)
         model_path = os.path.join(path, f'{model.model_name}.onnx')
         # if not os.path.exists(model_path):
+        inputs = model.get_input_names()
+        axes = model.get_dynamic_axes() 
+        if self.model_type == 'encoder':
+            x1 = torch.randn(2,30,560)
+            x2 = torch.tensor([6,30], dtype=torch.int32)
+            dummy_input = (x1, x2)
+        elif self.model_type == 'predictor':
+            x1 = torch.randn(2,10,512)
+            x2 = torch.tensor([4,10], dtype=torch.int32)
+            dummy_input = (x1, x2)
+   
+        elif self.model_type == 'decoder':
+            x1 = torch.randn(2,10,512)
+            x2 = torch.tensor([4,10], dtype=torch.float32)
+            x3 = torch.randn(2,30,512)
+            x4 = torch.tensor([6,30], dtype=torch.int32)
+            dummy_input = (x1, x2, x3, x4)
+            inputs = ['speech', 'speech_lengths', 'x1', 'y1']
+            axes = {'speech': {0: 'batch_size',1: 'feats_length'},
+            'speech_lengths': {0: 'batch_size',},
+            'x1': {0: 'batch_size',1: 'feats_lengths'},
+            'y1': {0: 'batch_size',},
+             }
+        else:
+            dummy_input = dummy_input
+
         torch.onnx.export(
             model_script,
             dummy_input,
             model_path,
             verbose=verbose,
             opset_version=14,
-            input_names=model.get_input_names(),
+            input_names=inputs,
             output_names=model.get_output_names(),
-            dynamic_axes=model.get_dynamic_axes()
+            dynamic_axes=axes
         )
 
         if self.quant:
@@ -254,7 +283,7 @@ class ModelExport:
             if not os.path.exists(quant_model_path):
                 onnx_model = onnx.load(model_path)
                 nodes = [n.name for n in onnx_model.graph.node]
-                nodes_to_exclude = [m for m in nodes if 'output' in m or 'bias_encoder' in m  or 'bias_decoder' in m]
+                nodes_to_exclude = [m for m in nodes if 'output' in m]
                 quantize_dynamic(
                     model_input=model_path,
                     model_output=quant_model_path,
@@ -279,8 +308,9 @@ if __name__ == '__main__':
     parser.add_argument('--audio_in', type=str, default=None, help='["wav", "wav.scp"]')
     parser.add_argument('--calib_num', type=int, default=200, help='calib max num')
     parser.add_argument('--model_revision', type=str, default=None, help='model_revision')
+    parser.add_argument('--model_type', type=str, default=None, help='model_type')
     args = parser.parse_args()
-
+    print(args)
     export_model = ModelExport(
         cache_dir=args.export_dir,
         onnx=args.type == 'onnx',
@@ -290,7 +320,9 @@ if __name__ == '__main__':
         audio_in=args.audio_in,
         calib_num=args.calib_num,
         model_revision=args.model_revision,
+        model_type=args.model_type
     )
     for model_name in args.model_name:
         print("export model: {}".format(model_name))
         export_model.export(model_name)
+
