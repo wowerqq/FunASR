@@ -245,11 +245,50 @@ class ModelExport:
             x1 = torch.randn(2,30,560)
             x2 = torch.tensor([6,30], dtype=torch.int32)
             dummy_input = (x1, x2)
+            get_output_names = ['enc', 'enc_len']
+            axes = {
+            'speech': {
+                0: 'batch_size',
+                1: 'feats_length'
+            },
+            'speech_lengths': {
+                0: 'batch_size',
+            },
+        }
+            torch.onnx.export(
+                model_script,
+                dummy_input,
+                model_path,
+                verbose=verbose,
+                opset_version=14,
+                input_names=inputs,
+                output_names=get_output_names,
+                dynamic_axes=axes
+            )
         elif self.model_type == 'predictor':
             x1 = torch.randn(2,10,512)
             x2 = torch.tensor([4,10], dtype=torch.int32)
             dummy_input = (x1, x2)
-   
+            get_output_names = ['pre_acoustic_embeds', 'pre_token_length']
+            axes = {
+            'speech': {
+                0: 'batch_size',
+                1: 'feats_length'
+            },
+            'speech_lengths': {
+                0: 'batch_size',
+            },
+        }
+            torch.onnx.export(
+                model_script,
+                dummy_input,
+                model_path,
+                verbose=verbose,
+                opset_version=14,
+                input_names=inputs,
+                output_names=get_output_names,
+                dynamic_axes=axes
+            )  
         elif self.model_type == 'decoder':
             x1 = torch.randn(2,10,512)
             x2 = torch.tensor([4,10], dtype=torch.float32)
@@ -262,19 +301,23 @@ class ModelExport:
             'x1': {0: 'batch_size',1: 'feats_lengths'},
             'y1': {0: 'batch_size',},
              }
+            get_output_names = ['decoder_out', 'speech_lengths']
+ 
+        
+            torch.onnx.export(
+                model_script,
+                dummy_input,
+                model_path,
+                verbose=verbose,
+                opset_version=14,
+                input_names=inputs,
+                output_names=model.get_output_names(),
+                dynamic_axes=axes
+            )
         else:
             dummy_input = dummy_input
 
-        torch.onnx.export(
-            model_script,
-            dummy_input,
-            model_path,
-            verbose=verbose,
-            opset_version=14,
-            input_names=inputs,
-            output_names=model.get_output_names(),
-            dynamic_axes=axes
-        )
+  
 
         if self.quant:
             from onnxruntime.quantization import QuantType, quantize_dynamic
@@ -325,4 +368,3 @@ if __name__ == '__main__':
     for model_name in args.model_name:
         print("export model: {}".format(model_name))
         export_model.export(model_name)
-
