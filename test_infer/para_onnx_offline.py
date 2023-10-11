@@ -81,13 +81,13 @@ def rec_wav():
 
     feats, feats_len = extract_feat(waveform_list) 
     encoder = {'speech': feats.numpy(), 'speech_lengths': feats_len.numpy() } 
-    output_name = ['logits', 'token_num']
-    #output = sess.run(output_name, input_feed=encoder)
+    output_name = ['enc', 'enc_len']
     enc_output = encoder_sess.run(output_name, input_feed=encoder)
-
     pre_feed = {'speech': enc_output[0], 'speech_lengths': enc_output[1]}
+    output_name = ['pre_acoustic_embeds', 'pre_token_length']
     pre_output = prc_sess.run(output_name, input_feed=pre_feed)
     dec_feed = {'speech': pre_output[0], 'speech_lengths': pre_output[1], 'x1':enc_output[0], 'y1':enc_output[1]}
+    output_name = ['logits', 'token_num']
     dec_output = decoder_sess.run(output_name, input_feed=dec_feed)
     #print (output[0].shape)
     #print (output[1].shape)
