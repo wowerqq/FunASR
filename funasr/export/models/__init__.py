@@ -17,7 +17,7 @@ from funasr.export.models.e2e_asr_contextual_paraformer import ContextualParafor
 from funasr.models.e2e_asr_contextual_paraformer import NeatContextualParaformer
 
 
-def get_model(model, export_config=None):
+def get_model(model, model_type, export_config=None):
     if isinstance(model, NeatContextualParaformer):
         backbone = ContextualParaformer_backbone_export(model, **export_config)
         embedder = ContextualParaformer_embedder_export(model, **export_config)
@@ -25,11 +25,10 @@ def get_model(model, export_config=None):
     elif isinstance(model, BiCifParaformer):
         return BiCifParaformer_export(model, **export_config)
     elif isinstance(model, ParaformerOnline):
-        encoder = ParaformerOnline_encoder_predictor_export(model, model_name="model")
-        decoder = ParaformerOnline_decoder_export(model, model_name="decoder")
-        return [encoder, decoder]
+        return (ParaformerOnline_encoder_predictor_export(model, model_name="model"),
+                ParaformerOnline_decoder_export(model, model_name="decoder"))
     elif isinstance(model, Paraformer):
-        return Paraformer_export(model, **export_config)
+        return Paraformer_export(model, model_type, **export_config)
     elif isinstance(model, Conformer_export):
         return Conformer_export(model, **export_config)
     elif isinstance(model, E2EVadModel):
