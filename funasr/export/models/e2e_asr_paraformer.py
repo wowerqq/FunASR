@@ -28,6 +28,7 @@ class Paraformer(nn.Module):
     def __init__(
             self,
             model,
+            model_type,
             max_seq_len=512,
             feats_dim=560,
             model_name='model',
@@ -50,7 +51,7 @@ class Paraformer(nn.Module):
         
         self.feats_dim = feats_dim
         self.model_name = model_name
-
+        self.model_type = model_type
         if onnx:
             self.make_pad_mask = MakePadMask(max_seq_len, flip=False)
         else:
@@ -60,21 +61,34 @@ class Paraformer(nn.Module):
             self,
             speech: torch.Tensor,
             speech_lengths: torch.Tensor,
+            x1=None,
+            y1=None,
     ):
+        if self.model_type == 'encoder':
+            batch = {"speech": speech, "speech_lengths": speech_lengths}
+            enc, enc_len = self.encoder(**batch)
+            return enc, enc_len
+        elif self.model_type == 'predictor':
+            mask = self.make_pad_mask(speech_lengths)[:, None, :]
+            pre_acoustic_embeds, pre_token_length, alphas, pre_peak_index = self.predictor(speech, mask)
+            return pre_acoustic_embeds, pre_token_length
+        elif self.model_type == 'decoder':
+            speech_lengths = speech_lengths.floor().type(torch.int32)
+            decoder_out, _ = self.decoder(x1, y1, speech, speech_lengths)
+            decoder_out = torch.log_softmax(decoder_out, dim=-1)
+            return decoder_out, speech_lengths
+        else:
         # a. To device
-        batch = {"speech": speech, "speech_lengths": speech_lengths}
+            batch = {"speech": speech, "speech_lengths": speech_lengths}
         # batch = to_device(batch, device=self.device)
-    
-        enc, enc_len = self.encoder(**batch)
-        mask = self.make_pad_mask(enc_len)[:, None, :]
-        pre_acoustic_embeds, pre_token_length, alphas, pre_peak_index = self.predictor(enc, mask)
-        pre_token_length = pre_token_length.floor().type(torch.int32)
+            enc, enc_len = self.encoder(**batch)
+            mask = self.make_pad_mask(enc_len)[:, None, :]
+            pre_acoustic_embeds, pre_token_length, alphas, pre_peak_index = self.predictor(enc, mask)
+            pre_token_length = pre_token_length.floor().type(torch.int32)
 
-        decoder_out, _ = self.decoder(enc, enc_len, pre_acoustic_embeds, pre_token_length)
-        decoder_out = torch.log_softmax(decoder_out, dim=-1)
-        # sample_ids = decoder_out.argmax(dim=-1)
-
-        return decoder_out, pre_token_length
+            decoder_out, _ = self.decoder(enc, enc_len, pre_acoustic_embeds, pre_token_length)
+            decoder_out = torch.log_softmax(decoder_out, dim=-1)
+            return decoder_out, pre_token_length
 
     def get_dummy_inputs(self):
         speech = torch.randn(2, 30, self.feats_dim)
@@ -364,3 +378,4 @@ class ParaformerOnline_decoder(nn.Module):
 
     def get_dynamic_axes(self):
         return self.decoder.get_dynamic_axes()
+
